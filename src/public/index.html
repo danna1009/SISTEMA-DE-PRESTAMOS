@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sistema de Préstamos - RENIEC/SUNAT</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Sistema de Préstamos</h1>
+      <p>Consultas en tiempo real a RENIEC y SUNAT</p>
+    </header>
+
+    <div class="main-content">
+      <!-- Columna izquierda -->
+      <div class="card">
+        <h2>Verificación de Cliente</h2>
+
+        <div class="query-type">
+          <button class="query-btn active" id="btnDni" onclick="cambiarTipoConsulta('dni')">Consulta por DNI</button>
+          <button class="query-btn" id="btnRuc" onclick="cambiarTipoConsulta('ruc')">Consulta por RUC</button>
+        </div>
+
+        <div id="dniSection">
+          <div class="form-group">
+            <label for="dni">Número de DNI:</label>
+            <input type="text" id="dni" placeholder="Ingrese DNI (8 dígitos)"/>
+          </div>
+        </div>
+
+        <div id="rucSection" class="hidden">
+          <div class="form-group">
+            <label for="ruc">Número de RUC:</label>
+            <input type="text" id="ruc" placeholder="Ingrese RUC (11 dígitos)"/>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button id="btnVerificar" class="primary-btn" onclick="verificarCliente()" style="flex:1;">
+            <span id="btnText">🔍 Verificar con API</span>
+            <span id="loadingSpinner" class="spinner hidden"></span>
+          </button>
+          <button class="secondary-btn" onclick="abrirModalManual()" title="Registrar cliente sin API">
+            ✍️ Manual
+          </button>
+        </div>
+
+        <div id="notification" class="notification hidden"></div>
+
+        <div id="customerInfo" class="customer-info hidden">
+          <h3>✅ Cliente verificado</h3>
+          <p><strong>Nombre:</strong> <span id="nombreCliente"></span></p>
+          <p><strong>Documento:</strong> <span id="documentoCliente"></span></p>
+          <p><strong>Tipo:</strong> <span id="tipoCliente"></span></p>
+          <p><strong>Dirección:</strong> <span id="direccionCliente"></span></p>
+          <p><strong>Estado:</strong> <span id="estadoCliente"></span></p>
+          <p id="origenBadge" class="manual-badge" style="display:none;margin-top:8px;">
+            <span class="manual-chip">📝 Registro Manual</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Columna derecha -->
+      <div class="card">
+        <h2>Registrar Préstamo</h2>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="monto">Monto (S/):</label>
+            <input type="number" id="monto" step="0.01" placeholder="Ej: 5000"/>
+          </div>
+          <div class="form-group">
+            <label for="interes">Interés anual (%):</label>
+            <input type="number" id="interes" value="5" step="0.01" max="100"/>
+            <small class="muted">Máximo permitido: 100% anual</small>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="plazo">Plazo (meses):</label>
+            <input type="number" id="plazo" value="12"/>
+          </div>
+          <div class="form-group">
+            <label for="moraDiaria">Mora diaria (%):</label>
+            <input type="number" id="moraDiaria" value="0.05" step="0.01"/>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="analista">Analista de crédito: <span class="req">*</span></label>
+            <input type="text" id="analista" placeholder="Nombre del analista" required/>
+            <small class="muted">Campo obligatorio</small>
+          </div>
+          <div class="form-group">
+            <label for="caja">Caja:</label>
+            <input type="text" id="caja" placeholder="N° de caja"/>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="correo">Correo electrónico:</label>
+            <input type="email" id="correo" placeholder="ejemplo@correo.com"/>
+          </div>
+          <div class="form-group">
+            <label for="celular">Número de celular: <span class="req">*</span></label>
+            <input type="tel" id="celular" placeholder="999 999 999" maxlength="15" required/>
+            <small id="celularError" class="err-text hidden">El celular es obligatorio.</small>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="fechaInicio">Fecha de desembolso:</label>
+          <input type="date" id="fechaInicio"/>
+        </div>
+
+        <!-- Bloque de cálculo -->
+        <div class="calc-info">
+          <div id="interesCalculado" class="hidden">
+            <strong>Monto prestado:</strong> <span id="montoPrestado"></span> |
+            <strong>Tasa:</strong> <span id="tasaInteres"></span> |
+            <strong>Interés total:</strong> <span id="interesTotal"></span> |
+            <strong>Total a pagar:</strong> <span id="montoTotalPagar"></span>
+          </div>
+          <div id="fechaCalculada" class="hidden">
+            <strong>Desembolso:</strong> <span id="fechaDesembolsoMostrada"></span> |
+            <strong>Primera cuota:</strong> <span id="fechaPrimeraCuotaMostrada"></span> |
+            <strong>Última cuota:</strong> <span id="fechaUltimaCuotaMostrada"></span>
+          </div>
+          <div id="primeraCuota" class="hidden">
+            Primera cuota: <span id="fechaPrimeraCuota"></span> — <span id="montoPrimeraCuota"></span>
+          </div>
+        </div>
+
+        <button id="btnRegistrar" class="primary-btn" onclick="registrarPrestamo()" disabled>Registrar Préstamo</button>
+      </div>
+    </div>
+
+    <!-- === Préstamos registrados === -->
+    <div class="card" style="margin-top: 20px;">
+      <h2>Préstamos registrados (<span id="totalPrestamos">0</span>)</h2>
+
+      <div class="loan-search">
+        <input id="loanSearchInput" type="search" placeholder="Buscar por nombre, documento, correo, celular o analista…" />
+      </div>
+
+      <div class="loan-filters">
+        <button id="fltAll" class="filter-btn active" onclick="setLoanFilter('all')">Todos</button>
+        <button id="fltAct" class="filter-btn" onclick="setLoanFilter('activos')">Activos</button>
+        <button id="fltCan" class="filter-btn" onclick="setLoanFilter('cancelados')">Cancelados</button>
+      </div>
+
+      <div id="loansList"></div>
+    </div>
+  </div>
+
+  <!-- MODALES (cronograma / registro manual) -->
+  <div id="cronogramaModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="cerrarModalCronograma()">&times;</span>
+
+      <h3 id="cronogramaClienteModal"></h3>
+      <p id="cronogramaDocumentoModal"></p>
+      <p id="cronogramaDetallesModal" class="small-muted"></p>
+
+      <div class="inline-fields" style="margin:10px 0 6px;">
+        <button class="print-cronograma-btn" onclick="imprimirCronogramaActual()">🖨 Imprimir cronograma</button>
+        <button class="print-cronograma-btn" onclick="compartirCronogramaPDF()">📤 Compartir PDF</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+          <tr>
+            <th>Mes</th><th>Vencimiento</th><th>Amortización</th><th>Interés</th><th>Cuota</th><th>Saldo</th>
+          </tr>
+          </thead>
+          <tbody id="cronogramaBodyModal"></tbody>
+          <tfoot>
+          <tr class="total-row">
+            <td colspan="2">TOTAL</td>
+            <td id="totalAmortizacionModal"></td>
+            <td id="totalInteresModal"></td>
+            <td id="totalCuotaModal"></td>
+            <td id="saldoFinalModal"></td>
+          </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="pay-panel">
+        <div class="pay-row">
+          <div class="inline-fields">
+            <label>Fecha de pago:</label>
+            <input type="date" id="fechaPagoInput"/>
+          </div>
+
+          <div class="inline-fields">
+            <label>Mora diaria (%):</label>
+            <input type="number" id="moraEditableInput" step="0.01" style="width:120px;"/>
+            <button class="mini-btn" onclick="actualizarMoraDiariaPrestamo()">Actualizar mora</button>
+          </div>
+
+          <div>
+            <button class="mini-btn" onclick="registrarPagoCuotaSiguiente()">💳 Pagar próxima cuota</button>
+            <button class="mini-btn" onclick="imprimirUltimoComprobante()">🖨 Último comprobante</button>
+            <button class="mini-btn" onclick="compartirUltimoComprobantePDF()">📤 Compartir comprobante</button>
+          </div>
+        </div>
+
+        <p id="proximaInfoTexto" class="proxima-info" style="margin-top:8px;"></p>
+
+        <div class="pay-row" style="margin-top:10px;">
+          <div class="inline-fields">
+            <label>Abono a capital (S/):</label>
+            <input type="number" id="montoAbonoCapital" step="0.01" style="width:160px;"/>
+            <button class="mini-btn" onclick="registrarPagoACapital()">💵 Registrar abono</button>
+          </div>
+          <button class="mini-btn mini-btn-danger" onclick="cancelarPrestamoCompleto()">🛑 Cancelación total</button>
+        </div>
+      </div>
+
+      <h4 style="margin-top:16px;">Historial de pagos</h4>
+      <div class="table-wrapper">
+        <table class="table-mini">
+          <thead>
+          <tr>
+            <th>N°</th>
+            <th>Tipo</th>
+            <th>Fecha</th>
+            <th>Mora</th>
+            <th>Total</th>
+            <th>Acciones</th>
+          </tr>
+          </thead>
+          <tbody id="historialPagosBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalManual" class="modal">
+    <div class="modal-content" style="max-width:500px;">
+      <span class="close" onclick="cerrarModalManual()">&times;</span>
+      <h3>✍️ Registro Manual de Cliente</h3>
+      <p class="small-muted">Use este formulario cuando la API de RENIEC/SUNAT no esté disponible</p>
+
+      <div class="form-group">
+        <label for="manualTipo">Tipo de documento: <span class="req">*</span></label>
+        <select id="manualTipo">
+          <option value="DNI">DNI (8 dígitos)</option>
+          <option value="RUC">RUC (11 dígitos)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="manualDocumento">Número de documento: <span class="req">*</span></label>
+        <input type="text" id="manualDocumento" placeholder="Ingrese el número"/>
+      </div>
+
+      <div class="form-group">
+        <label for="manualNombre">Nombre completo / Razón social: <span class="req">*</span></label>
+        <input type="text" id="manualNombre" placeholder="Ingrese el nombre completo"/>
+      </div>
+
+      <div class="form-group">
+        <label for="manualDireccion">Dirección:</label>
+        <input type="text" id="manualDireccion" placeholder="Ingrese la dirección (opcional)"/>
+      </div>
+
+      <button class="primary-btn" onclick="registrarClienteManual()" style="width:100%;">✅ Registrar Cliente</button>
+    </div>
+  </div>
+
+  <!-- Librerías PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

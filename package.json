@@ -1,0 +1,24 @@
+{
+  "name": "sistema-de-prestamos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de gestión de préstamos con Node.js, Express y PostgreSQL.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --env-file .env --watch src/index.js"
+  },
+  "keywords": [
+    "prestamos",
+    "express",
+    "postgresql"
+  ],
+  "author": "Tu Nombre Aqui",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "morgan": "^1.10.0",
+    "pg": "^8.11.3"
+  }
+}

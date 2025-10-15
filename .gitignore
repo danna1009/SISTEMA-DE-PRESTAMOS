@@ -1,0 +1,5 @@
+# Dependencias de Node.js
+node_modules
+
+# Archivo de variables de entorno (Contiene secretos)
+.env
