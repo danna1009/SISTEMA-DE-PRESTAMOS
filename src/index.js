@@ -1,12 +1,17 @@
-// src/index.js
+// src/index.js (Versión corregida para Render)
+
 import express from 'express';
-import {PORT} from './config.js';
+// ELIMINAMOS: import {PORT} from './config.js'; 
 import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 // Importamos las rutas
 import prestamosRoutes from './routes/prestamos.routes.js';
+
+// Asignamos el puerto de Render o un valor por defecto (ej. 3000)
+// 💡 Render provee la variable PORT automáticamente.
+const RENDER_PORT = process.env.PORT || 3000; 
 
 // Inicialización
 const app = express();
@@ -23,5 +28,8 @@ app.use('/api', prestamosRoutes);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Iniciar el servidor
-app.listen(PORT);
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+app.listen(RENDER_PORT, () => { // Usamos RENDER_PORT
+  console.log(`🚀 Servidor corriendo en el puerto ${RENDER_PORT}`);
+}); 
+// La línea 'http://localhost' solo es válida en desarrollo.
+// En producción, solo importa el puerto.
