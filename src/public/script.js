@@ -43,8 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
   fechaInicio.value = today;
   fechaInicio.min   = today;
 
-  cargarPrestamosDesdeAPI();
+  const guardados = localStorage.getItem("prestamosRegistrados");
+  if (guardados) prestamosRegistrados = JSON.parse(guardados);
 
+  actualizarListaPrestamos();
   actualizarCalculos();
 
   // recalcular en tiempo real
@@ -65,43 +67,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-async function cargarPrestamosDesdeAPI() {
-  try {
-    const response = await fetch('/api/prestamos');
-    if (!response.ok) {
-      throw new Error('No se pudieron cargar los préstamos');
-    }
-    const prestamosDesdeDB = await response.json();
-    
-    // Mapeamos los nombres de la BD a los que usa el frontend
-    prestamosRegistrados = prestamosDesdeDB.map(p => ({
-        id: p.id_prestamo,
-        nroPrestamo: p.nro_prestamo,
-        analista: p.analista,
-        cliente: p.cliente,
-        documento: p.documento,
-        fechaDesembolso: p.fecha_desembolso.split('T')[0], // Limpiamos la fecha
-        monto: parseFloat(p.saldo_capital_actual),
-        montoOriginal: parseFloat(p.monto_original),
-        interes: parseFloat(p.tasa_interes_anual),
-        plazo: p.plazo_meses,
-        cuotaMensual: parseFloat(p.cuota_mensual_calculada),
-        moraDiaria: parseFloat(p.mora_diaria_pct),
-        cuotasPagadas: p.cuotas_pagadas,
-        cancelado: p.cancelado,
-        fechaCancelacion: p.fecha_cancelacion ? p.fecha_cancelacion.split('T')[0] : null,
-        // Datos que no vienen de la BD pero el frontend necesita
-        fechaRegistro: new Date(p.fecha_desembolso).toLocaleDateString('es-PE'),
-        fechaPrimeraCuota: sumarMeses(p.fecha_desembolso.split('T')[0], 1),
-        fechaUltimaCuota: sumarMeses(p.fecha_desembolso.split('T')[0], p.plazo_meses),
-        pagos: [], // Esto requerirá una llamada a la API para cargar el historial de pagos
-    }));
-    
-    actualizarListaPrestamos();
-  } catch (error) {
-    console.error('Error:', error);
-    mostrarNotificacion(error.message, 'error');
-  }
+function guardarPrestamos(){
+  localStorage.setItem("prestamosRegistrados", JSON.stringify(prestamosRegistrados));
 }
 
 // ====== HELPERS UI ======
@@ -273,11 +240,11 @@ function siguienteHabilSiDomingoOFeriado(fechaISO){
 }
 
 // ====== REGISTRAR PRÉSTAMO (celular obligatorio) ======
-async function registrarPrestamo(){
-  // 1. Validaciones iniciales del formulario
+function registrarPrestamo(){
   if(!clienteVerificado) return mostrarNotificacion('Primero verifique al cliente (API o Manual)','error');
   if(!analista.value.trim()) return mostrarNotificacion('Ingrese Analista de crédito','error');
 
+  // celular obligatorio (solo no vacío)
   celular.classList.remove('field-error'); celularError.classList.add('hidden');
   if(!celular.value.trim()){
     celular.classList.add('field-error'); celularError.classList.remove('hidden');
@@ -294,99 +261,102 @@ async function registrarPrestamo(){
     return mostrarNotificacion('Complete los campos correctamente','error');
   }
 
-  // 2. Validaciones de negocio (reglas de préstamo)
+  // ====== VALIDACIÓN: Control de préstamos por cliente ======
   const documentoCliente = clienteVerificado.documento;
   const prestamosDelCliente = prestamosRegistrados.filter(p => p.documento === documentoCliente);
-
-  // REGLA 1: No puede tener más de un préstamo activo 
+  
+  // 1. Verificar si tiene préstamos activos (solo puede tener 1)
   const tienePrestamoActivo = prestamosDelCliente.some(p => !p.cancelado);
-  if (tienePrestamoActivo) {
-    return mostrarNotificacion('Este cliente ya tiene un préstamo activo. Debe cancelarlo antes de solicitar uno nuevo.', 'error');
+  if(tienePrestamoActivo){
+    return mostrarNotificacion('Este cliente ya tiene un préstamo activo. Debe cancelarlo antes de solicitar uno nuevo.','error');
   }
 
-  // REGLA 2: Debe esperar 1 mes después de cancelar un préstamo 
+  // 2. Verificar último préstamo cancelado (debe esperar 1 mes)
   const prestamosCancelados = prestamosDelCliente.filter(p => p.cancelado && p.fechaCancelacion);
-  if (prestamosCancelados.length > 0) {
-    prestamosCancelados.sort((a, b) => new Date(b.fechaCancelacion) - new Date(a.fechaCancelacion));
+  if(prestamosCancelados.length > 0){
+    // Ordenar por fecha de cancelación más reciente
+    prestamosCancelados.sort((a,b) => new Date(b.fechaCancelacion) - new Date(a.fechaCancelacion));
     const ultimoCancelado = prestamosCancelados[0];
+    
+    // Calcular meses desde la cancelación
     const fechaCancelacion = new Date(ultimoCancelado.fechaCancelacion + 'T00:00:00');
     const fechaActual = new Date();
+    const mesesTranscurridos = (fechaActual.getFullYear() - fechaCancelacion.getFullYear()) * 12 + 
+                               (fechaActual.getMonth() - fechaCancelacion.getMonth());
     
-    // Comparamos si ha pasado al menos un mes
-    const fechaMinimaParaSolicitar = new Date(fechaCancelacion);
-    fechaMinimaParaSolicitar.setMonth(fechaMinimaParaSolicitar.getMonth() + 1);
-
-    if (fechaActual < fechaMinimaParaSolicitar) {
+    // Debe esperar 1 mes después de cancelar
+    if(mesesTranscurridos < 1){
       const diasTranscurridos = Math.floor((fechaActual - fechaCancelacion) / (1000 * 60 * 60 * 24));
-      const fechaFormateada = formatearFechaParaTabla(fechaMinimaParaSolicitar.toISOString().split('T')[0]);
+      const fechaDisponible = new Date(fechaCancelacion);
+      fechaDisponible.setMonth(fechaDisponible.getMonth() + 1);
+      const fechaFormateada = formatearFechaParaTabla(fechaDisponible.toISOString().split('T')[0]);
+      
       return mostrarNotificacion(
-        `El cliente canceló su préstamo hace ${diasTranscurridos} día(s). Debe esperar 1 mes desde la cancelación. Disponible a partir del: ${fechaFormateada}`,
+        `El cliente canceló su préstamo hace ${diasTranscurridos} día${diasTranscurridos === 1 ? '' : 's'}. ` +
+        `Debe esperar 1 mes desde la cancelación. ` +
+        `Disponible a partir del: ${fechaFormateada}`,
         'error'
       );
     }
   }
-  
-  // REGLA 3: Solo se permite 1 préstamo por mes 
+
+  // 3. Verificar que solo solicite 1 préstamo por mes
+  // Contar préstamos registrados en el mes actual
   const hoy = new Date();
   const mesActual = hoy.getMonth();
-  const anioActual = hoy.getFullYear();
+  const añoActual = hoy.getFullYear();
+  
   const prestamosEsteMes = prestamosDelCliente.filter(p => {
+    // Usar fechaDesembolso para verificar cuándo se otorgó el préstamo
     const fechaPrestamo = new Date(p.fechaDesembolso + 'T00:00:00');
-    return fechaPrestamo.getMonth() === mesActual && fechaPrestamo.getFullYear() === anioActual;
+    return fechaPrestamo.getMonth() === mesActual && fechaPrestamo.getFullYear() === añoActual;
   });
 
-  if (prestamosEsteMes.length > 0) {
-    const prestamoAnterior = prestamosEsteMes[0];
-    const fechaDesembolso = formatearFechaParaTabla(prestamoAnterior.fechaDesembolso);
+  if(prestamosEsteMes.length > 0){
+    const prestamo = prestamosEsteMes[0];
+    const fechaDesembolso = formatearFechaParaTabla(prestamo.fechaDesembolso);
+    
     return mostrarNotificacion(
-      `El cliente ya solicitó un préstamo este mes (${fechaDesembolso}). Solo se permite 1 préstamo por mes.`,
+      `El cliente ya solicitó un préstamo este mes (${fechaDesembolso}). ` +
+      `Solo se permite 1 préstamo por mes. Debe esperar a demostrar su historial de pagos.`,
       'error'
     );
   }
+  // ====== FIN VALIDACIÓN ======
 
-  // ... (Aquí van el resto de tus validaciones de negocio que ya tienes bien)
-  // ... (Verificar último préstamo cancelado y si ya solicitó este mes)
+  const cuota      = calcularCuotaFija(montoVal, interesVal, plazoMes);
+  const total      = cuota*plazoMes;
+  const interTotal = total - montoVal;
+  const f1 = sumarMeses(f0,1), fN = sumarMeses(f0,plazoMes);
 
-  // 3. Crear el objeto para enviar a la API
-  const cuota = calcularCuotaFija(montoVal, interesVal, plazoMes);
-
-  const nuevoPrestamo = {
-    cliente: clienteVerificado,
-    documento: clienteVerificado.documento,
-    nroPrestamo: Math.floor(100000 + Math.random() * 899999).toString(),
+  const prestamo = {
+    id: Date.now(),
+    nroPrestamo: Math.floor(100000+Math.random()*899999).toString(),
     analista: (analista.value || '—').trim(),
-    caja: (caja.value || '—').trim(),
-    correo: (correo.value || '—').trim(),
-    celular: (celular.value || '—').trim(),
-    fechaDesembolso: f0,
-    monto: montoVal,
-    montoOriginal: montoVal,
-    interes: interesVal,
-    plazo: plazoMes,
-    cuotaMensual: cuota,
-    moraDiaria: moraDiaVal,
+    caja    : (caja.value || '—').trim(),
+    correo  : (correo.value || '—').trim(),
+    celular : (celular.value || '—').trim(),
+
+    cliente: clienteVerificado.nombre,
+    documento: clienteVerificado.documento,
+
+    fechaRegistro: new Date().toLocaleDateString('es-PE'),
+    fechaDesembolso: f0, fechaPrimeraCuota: f1, fechaUltimaCuota: fN,
+
+    monto: montoVal, montoOriginal: montoVal,
+    interes: interesVal, interesTotal: interTotal,
+    plazo: plazoMes, plazoOriginal: plazoMes,
+    cuotaMensual: cuota, montoTotal: total,
+
+    moraDiaria: moraDiaVal, cuotasPagadas: 0, moraAcumulada: 0,
+    pagos: [], pagosCapital: [],
+    cancelado: false, fechaCancelacion: null
   };
 
-  // 4. Enviar a la API usando fetch
-  try {
-    const response = await fetch('/api/prestamos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(nuevoPrestamo),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Error al registrar el préstamo');
-    }
-
-    await cargarPrestamosDesdeAPI(); // Recargar la lista desde la base de datos
-    mostrarNotificacion('Préstamo registrado exitosamente en la base de datos', 'success');
-  
-  } catch (error) {
-    console.error('Error:', error);
-    mostrarNotificacion(error.message, 'error');
-  }
+  prestamosRegistrados.push(prestamo);
+  guardarPrestamos();
+  actualizarListaPrestamos();
+  mostrarNotificacion('Préstamo registrado exitosamente','success');
 }
 
 // ====== FILTROS ======
@@ -470,29 +440,16 @@ function actualizarListaPrestamos(){
 }
 
 // ====== ELIMINAR PRÉSTAMO ======
-async function eliminarPrestamo(id){
-  if(!confirm('¿Eliminar este préstamo de la base de datos? Esta acción es irreversible.')) return;
-  
-  try {
-    // Aún necesitas crear esta ruta en tu archivo prestamos.routes.js
-    const response = await fetch(`/api/prestamos/${id}`, { method: 'DELETE' });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'No se pudo eliminar el préstamo');
-    }
-
-    await cargarPrestamosDesdeAPI(); // Recargamos la lista para reflejar el cambio
-
-    const wasOpen = prestamoActualParaCronograma && prestamoActualParaCronograma.id === id;
-    if (wasOpen) cerrarModalCronograma();
-    
-    mostrarNotificacion('Préstamo eliminado de la base de datos','success');
-
-  } catch (error) {
-    console.error('Error al eliminar:', error);
-    mostrarNotificacion(error.message, 'error');
-  }
+function eliminarPrestamo(id){
+  const i = prestamosRegistrados.findIndex(p=>p.id===id);
+  if(i===-1) return;
+  if(!confirm('¿Eliminar este préstamo?')) return;
+  const wasOpen = prestamoActualParaCronograma && prestamoActualParaCronograma.id===id;
+  prestamosRegistrados.splice(i,1);
+  guardarPrestamos();
+  actualizarListaPrestamos();
+  if (wasOpen) cerrarModalCronograma();
+  mostrarNotificacion('Préstamo eliminado','success');
 }
 
 // ====== CRONOGRAMA: ABRIR / CERRAR (abre primero el modal) ======
@@ -776,78 +733,48 @@ function imprimirUltimoComprobante(){
 }
 
 // ====== PAGOS / ABONOS / CANCELACIÓN ======
-async function registrarPagoCuotaSiguiente() {
+function registrarPagoCuotaSiguiente(){
   const p = prestamoActualParaCronograma;
-  if (!p) return mostrarNotificacion("Abre un cronograma primero.", "error");
-  if (p.cancelado) return mostrarNotificacion("Este préstamo ya está cancelado.", "info");
+  if(!p) return mostrarNotificacion("Abre un cronograma primero.","error");
+  if(p.cancelado) return mostrarNotificacion("Este préstamo ya está cancelado.","info");
 
   const prox = obtenerProximaCuotaNoPagada(p);
-  if (!prox) return mostrarNotificacion("Todas las cuotas están pagadas.", "info");
+  if(!prox) return mostrarNotificacion("Todas las cuotas están pagadas.","info");
 
-  // 1. Realizar todos los cálculos necesarios como antes
   const fechaPago = fechaPagoInput.value || new Date().toISOString().split('T')[0];
-  const vtoAjust = siguienteHabilSiDomingoOFeriado(prox.fechaVencISO);
-  const diasAtraso = Math.max(0, diffDias(vtoAjust, fechaPago));
-  const moraDiariaPct = parseFloat(p.moraDiaria || 0);
-  const mora = +(prox.montoCuota * (moraDiariaPct / 100) * diasAtraso).toFixed(2);
+  const vtoAjust  = siguienteHabilSiDomingoOFeriado(prox.fechaVencISO);
+  const diasAtraso= Math.max(0, diffDias(vtoAjust, fechaPago));
+  const moraDiariaPct = parseFloat(p.moraDiaria||0);
+  const mora = +(prox.montoCuota * (moraDiariaPct/100) * diasAtraso).toFixed(2);
 
-  const iM = p.interes / 100 / 12;
+  // capital / interés de la cuota según saldo actual
+  const iM = p.interes/100/12;
   const saldoAntes = p.monto;
-  const interes = saldoAntes * iM;
+  const interes = saldoAntes*iM;
   const capital = prox.montoCuota - interes;
 
   const totalCobro = capital + interes + mora;
-  const itf = +(totalCobro * 0.00005).toFixed(2);
+  const itf = +(totalCobro*0.00005).toFixed(2);
   const totalPagado = +(totalCobro + itf).toFixed(2);
-  const saldoCapitalDespues = +(saldoAntes - capital).toFixed(2);
-  
-  // 2. Crear el objeto que se enviará a la API
-  const datosDelPago = {
-    nCuota: prox.nCuota,
-    fechaPagoISO: fechaPago,
-    capital: capital,
-    interes: interes,
-    moraCobrada: mora,
-    itf: itf,
-    totalPagado: totalPagado,
-    saldoCapitalDespues: saldoCapitalDespues
-  };
 
-  // 3. Enviar los datos del pago al backend
-  try {
-    const response = await fetch(`/api/prestamos/${p.id}/pagos`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(datosDelPago),
-    });
+  // actualizar préstamo
+  p.monto = +(p.monto - capital).toFixed(2);
+  p.cuotasPagadas = prox.nCuota;
+  p.moraAcumulada = +(p.moraAcumulada + mora).toFixed(2);
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Error al registrar el pago en el servidor');
-    }
-    
-    // 4. Si el pago fue exitoso en el backend, actualizamos la vista
-    mostrarNotificacion(`Cuota ${prox.nCuota} registrada en la base de datos.`, 'success');
+  if(!p.pagos) p.pagos=[];
+  p.pagos.push({
+    tipo:'CUOTA', nCuota:prox.nCuota, fechaPagoISO:fechaPago,
+    montoCuota:prox.montoCuota, capital, interes,
+    moraCobrada:mora, diasAtraso, itf, totalPagado,
+    saldoCapitalDespues:p.monto
+  });
 
-    // Actualizamos el objeto local para reflejar los cambios sin recargar toda la lista
-    p.monto = saldoCapitalDespues;
-    p.cuotasPagadas = prox.nCuota;
-    p.moraAcumulada = (p.moraAcumulada || 0) + mora;
-    if (!p.pagos) p.pagos = [];
-    p.pagos.push({
-        tipo: 'CUOTA',
-        ...datosDelPago
-    });
-    
-    generarCronogramaEnModal(p); // Refresca la vista del modal
-    imprimirRecibo(p, prox.nCuota, prox.montoCuota, mora);
+  guardarPrestamos();
+  generarCronogramaEnModal(p);
+  mostrarNotificacion(`Cuota ${prox.nCuota} registrada. Total pagado: S/ ${totalPagado.toFixed(2)}`,'success');
 
-  } catch (error) {
-    console.error('Error en el pago:', error);
-    mostrarNotificacion(error.message, 'error');
-  }
+  imprimirRecibo(p, prox.nCuota, prox.montoCuota, mora);
 }
 function actualizarMoraDiariaPrestamo(){
   const p = prestamoActualParaCronograma;
@@ -888,55 +815,28 @@ function registrarPagoACapital(){
   montoAbonoCapital.value='';
   mostrarNotificacion(`Abono de S/ ${montoAbono.toFixed(2)} registrado. Nuevo saldo: S/ ${p.monto.toFixed(2)}`,'success');
 }
-async function cancelarPrestamoCompleto() {
+function cancelarPrestamoCompleto(){
   const p = prestamoActualParaCronograma;
-  if (!p) return mostrarNotificacion("Abre un cronograma primero.", "error");
-  if (p.cancelado) return mostrarNotificacion("Este préstamo ya está cancelado.", "info");
+  if(!p) return mostrarNotificacion("Abre un cronograma primero.","error");
+  if(p.cancelado) return mostrarNotificacion("Este préstamo ya está cancelado.","info");
 
-  // 1. Calcular los montos finales como antes
   const saldoActual = p.monto;
-  const itf = +(saldoActual * 0.00005).toFixed(2);
+  const itf = +(saldoActual*0.00005).toFixed(2);
   const totalPagar = +(saldoActual + itf).toFixed(2);
-  
-  if (!confirm(`¿Desea realizar la cancelación total del préstamo por S/ ${totalPagar.toFixed(2)} (saldo + ITF)?`)) return;
+  if(!confirm(`¿Cancelar préstamo por S/ ${totalPagar.toFixed(2)} (incluye ITF)?`)) return;
 
   const fechaCancelacion = new Date().toISOString().split('T')[0];
 
-  // 2. Crear el objeto para enviar a la API
-  const datosCancelacion = {
-    fechaCancelacion: fechaCancelacion,
-    totalPagado: totalPagar,
-    itf: itf
-  };
+  p.cancelado = true; p.fechaCancelacion = fechaCancelacion;
+  p.monto = 0; p.cuotasPagadas = p.plazo;
 
-  // 3. Enviar la solicitud de cancelación al backend
-  try {
-    const response = await fetch(`/api/prestamos/${p.id}/cancelar`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(datosCancelacion),
-    });
+  if(!p.pagos) p.pagos=[];
+  p.pagos.push({ tipo:'CANCELACIÓN TOTAL', fechaPagoISO:fechaCancelacion, totalPagado:totalPagar, itf, saldoCapitalDespues:0 });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Error al cancelar el préstamo en el servidor');
-    }
-
-    // 4. Si la cancelación fue exitosa, recargamos los datos y actualizamos la UI
-    mostrarNotificacion(`Préstamo cancelado exitosamente. Total pagado: S/ ${totalPagar.toFixed(2)}`, 'success');
-    
-    // Recargamos todos los préstamos para reflejar el estado actualizado en la lista principal
-    await cargarPrestamosDesdeAPI(); 
-    
-    // Cerramos y reabrimos el modal para ver el estado "CANCELADO" inmediatamente
-    cerrarModalCronograma();
-
-  } catch (error) {
-    console.error('Error en la cancelación:', error);
-    mostrarNotificacion(error.message, 'error');
-  }
+  guardarPrestamos();
+  actualizarListaPrestamos();
+  generarCronogramaEnModal(p);
+  mostrarNotificacion(`Préstamo cancelado. Total pagado: S/ ${totalPagar.toFixed(2)}`,'success');
 }
 function anularUltimoPago(){
   const p = prestamoActualParaCronograma;
