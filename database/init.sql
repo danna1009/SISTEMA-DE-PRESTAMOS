@@ -1,7 +1,7 @@
 -- ====================================================================
 -- TABLA 1: CLIENTES (Incluye el campo 'es_pep' para la regla de DJ)
 -- ====================================================================
-CREATE TABLE CLIENTES (
+CREATE TABLE IF NOT EXISTS CLIENTES (
     id_cliente SERIAL PRIMARY KEY,
     documento VARCHAR(11) UNIQUE NOT NULL, -- DNI (8) o RUC (11)
     nombre VARCHAR(255) NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE CLIENTES (
 -- ====================================================================
 -- TABLA 2: PRESTAMOS (Incluye el campo 'requiere_dj')
 -- ====================================================================
-CREATE TABLE PRESTAMOS (
+CREATE TABLE IF NOT EXISTS PRESTAMOS (
     id_prestamo SERIAL PRIMARY KEY,
     id_cliente INT NOT NULL,
     nro_prestamo VARCHAR(10) UNIQUE,
@@ -42,7 +42,7 @@ CREATE TABLE PRESTAMOS (
 -- ====================================================================
 -- TABLA 3: CUOTAS_PROGRAMADAS (El cronograma explícito, obligatorio para recálculos)
 -- ====================================================================
-CREATE TABLE CUOTAS_PROGRAMADAS (
+CREATE TABLE IF NOT EXISTS CUOTAS_PROGRAMADAS (
     id_cuota SERIAL PRIMARY KEY,
     id_prestamo INT NOT NULL,
     nro_cuota INT NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE CUOTAS_PROGRAMADAS (
 -- ====================================================================
 -- TABLA 4: PAGOS (El historial de transacciones realizadas)
 -- ====================================================================
-CREATE TABLE PAGOS (
+CREATE TABLE IF NOT EXISTS PAGOS (
     id_pago SERIAL PRIMARY KEY,
     id_prestamo INT NOT NULL,
     fecha_pago DATE NOT NULL,
