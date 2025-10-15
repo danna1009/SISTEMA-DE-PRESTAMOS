@@ -280,11 +280,35 @@ async function registrarPrestamo(){
   if(!clienteVerificado) return mostrarNotificacion('Primero verifique al cliente (API o Manual)','error');
   if(!analista.value.trim()) return mostrarNotificacion('Ingrese Analista de crédito','error');
 
-  celular.classList.remove('field-error'); celularError.classList.add('hidden');
-  if(!celular.value.trim()){
-    celular.classList.add('field-error'); celularError.classList.remove('hidden');
-    return mostrarNotificacion('El número de celular es obligatorio.','error');
+  const celularVal = celular.value.trim();
+  celular.classList.remove('field-error'); 
+  celularError.classList.add('hidden'); // Ocultar mensaje de error
+
+  // REGLA: Celular obligatorio y debe tener 9 dígitos numéricos
+  if (!celularVal) {
+    celular.classList.add('field-error'); 
+    celularError.classList.remove('hidden'); // Mostrar mensaje de error (si existe)
+    return mostrarNotificacion('El número de celular es obligatorio.','error');
+  }
+  
+  // Expresión regular para verificar exactamente 9 dígitos.
+  // \d{9} significa 'exactamente 9 dígitos', ^ y $ anclan al inicio y final.
+  const celularRegex = /^\d{9}$/; 
+
+  if (!celularRegex.test(celularVal)) {
+    celular.classList.add('field-error');
+    return mostrarNotificacion('⚠ El número de celular debe contener exactamente 9 dígitos numéricos.','error');
+  }
+
+  const correoVal = correo.value.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // Expresión básica: algo@algo.algo
+
+  // Solo se valida si el campo NO está vacío. Si está vacío, se permite.
+  if (correoVal && !emailRegex.test(correoVal)) {
+    correo.classList.add('field-error');
+    return mostrarNotificacion('⚠ Ingrese un formato de correo válido (ej: usuario@dominio.com).','error');
   }
+  correo.classList.remove('field-error');
 
   const montoVal   = parseFloat(monto.value || '0');
   const interesVal = parseFloat(interes.value || '0');
