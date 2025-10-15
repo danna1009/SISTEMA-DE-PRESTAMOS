@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --env-file .env --watch src/index.js",
-    "migrate": "node database/db-setup.js" // <-- AÑADE ESTA LÍNEA
+    "migrate": "node database/db-setup.js" 
   },
   "keywords": [
     "prestamos",
