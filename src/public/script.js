@@ -296,6 +296,16 @@ async function registrarPrestamo(){
     return mostrarNotificacion('Complete los campos correctamente','error');
   }
 
+  if (esDomingo(f0) || esFeriadoPeru(f0)) {
+    const siguienteHabil = siguienteHabilSiDomingoOFeriado(f0);
+    const fechaFormateada = formatearFechaParaTabla(siguienteHabil);
+    return mostrarNotificacion(
+      '⚠ La fecha de desembolso no puede ser en domingo o feriado. ' + 
+      'La fecha más próxima es: ' + fechaFormateada,
+      'error'
+    );
+  }
+
   // 2. Validaciones de negocio (reglas de préstamo)
   const documentoCliente = clienteVerificado.documento;
   const prestamosDelCliente = prestamosRegistrados.filter(p => p.documento === documentoCliente);
