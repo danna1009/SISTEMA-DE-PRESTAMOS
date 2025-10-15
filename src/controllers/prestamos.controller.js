@@ -22,7 +22,9 @@ export const getPrestamos = async (req, res) => {
         p.cancelado,
         p.fecha_cancelacion,
         c.nombre AS cliente,
-        c.documento
+        c.documento,
+        c.correo,
+        c.celular
       FROM PRESTAMOS p
       JOIN CLIENTES c ON p.id_cliente = c.id_cliente
       ORDER BY p.cancelado ASC, p.fecha_desembolso DESC;
