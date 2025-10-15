@@ -1,21 +1,21 @@
-// src/db.js
-import pg from 'pg';
-import {
-  DB_DATABASE,
-  DB_HOST,
-  DB_PASSWORD,
-  DB_PORT,
-  DB_USER,
-}from './config.js';
+// src/db.js (Versión corregida para Render)
 
-// El script "dev" que usas (--env-file .env) carga automáticamente estas variables
+import pg from 'pg'; // Asegúrate de que 'pg' esté instalado (npm install pg)
+
+// En Render, las variables se leen directamente del entorno (process.env)
+// Las importaciones de './config.js' ya no son necesarias aquí.
 
 export const pool = new pg.Pool({
-  user: DB_USER,
-  password: DB_PASSWORD,
-  host: DB_HOST,
-  port: DB_PORT,
-  database: DB_DATABASE,
+  user: process.env.DB_USER,        // Leer de la variable de entorno de Render
+  password: process.env.DB_PASSWORD, // Leer de la variable de entorno de Render
+  host: process.env.DB_HOST,        // Leer de la variable de entorno de Render
+  port: process.env.DB_PORT,        // Leer de la variable de entorno de Render
+  database: process.env.DB_DATABASE,  // Leer de la variable de entorno de Render
+  
+  // 💡 ESTO ES CRÍTICO PARA RENDER (conexiones remotas):
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 pool.on('connect', () => {
