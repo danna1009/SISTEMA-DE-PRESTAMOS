@@ -1,4 +1,11 @@
-// src/index.js (Versión corregida para Render)
+// src/index.js
+
+// --- LÍNEAS DE DEPURACIÓN PARA VERIFICAR VARIABLES ---
+console.log('--- VERIFICANDO VARIABLES DE ENTORNO EN RENDER ---');
+console.log('DB_HOST leído por la aplicación:', process.env.DB_HOST);
+console.log('DB_USER leído por la aplicación:', process.env.DB_USER);
+console.log('--------------------------------------------------');
+
 
 import express from 'express';
 // ELIMINAMOS: import {PORT} from './config.js'; 
